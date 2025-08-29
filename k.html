@@ -2,7 +2,7 @@
 <html lang="fa">
 <head>
     <meta charset="UTF-8">
-    <title>میم‌کوین‌ها - وب هوشمند</title>
+    <title>میم‌کوین‌ها - وب هوشمند (بهینه)</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         body { font-family: Arial; text-align:center; margin:10px; }
@@ -33,7 +33,6 @@
 <body>
     <h1>میم‌کوین‌ها - وب هوشمند</h1>
 
-    <!-- پنل تنظیمات -->
     <div id="settings">
         <h3>تنظیم معیارها</h3>
         <label>تعداد کوین‌ها: <input type="number" id="numCoins" value="50"></label><br><br>
@@ -41,7 +40,7 @@
         <label>حداکثر مارکت کپ (USD): <input type="number" id="maxMarketCap" value="10000000"></label><br><br>
         <label>حداکثر قیمت کوین (USD): <input type="number" id="maxPrice" value="0.01" step="0.0001"></label><br><br>
         <label>درصد تغییر هشدار 24h: <input type="number" id="changePercent" value="10"></label><br><br>
-        <label>زمان بروزرسانی (ثانیه): <input type="number" id="updateInterval" value="10"></label><br><br>
+        <label>زمان بروزرسانی (ثانیه): <input type="number" id="updateInterval" value="15"></label><br><br>
         <button onclick="updateSettings()">اعمال تنظیمات</button>
     </div>
 
@@ -55,7 +54,7 @@
             maxMarketCap: 10000000,
             maxPrice: 0.01,
             changePercent: 10,
-            updateInterval: 10000
+            updateInterval: 15000
         };
         let intervalId;
 
@@ -73,19 +72,15 @@
         }
 
         function computeValidity(coin) {
-            // اعتبارسنجی: حجم، مارکت کپ، قیمت و صرافی معتبر
-            let hasVolume = coin.total_volume >= settings.minVolume;
-            let hasMarketCap = coin.market_cap <= settings.maxMarketCap;
-            let hasPrice = coin.current_price <= settings.maxPrice;
+            let score = 0;
+            if(coin.total_volume >= settings.minVolume) score++;
+            if(coin.market_cap <= settings.maxMarketCap) score++;
+            if(coin.current_price <= settings.maxPrice) score++;
+
+            // بررسی وجود حداقل یکی از صرافی‌های معتبر
             let exchanges = coin.tickers ? [...new Set(coin.tickers.map(t => t.market.name))] : [];
             let knownExchanges = ['Binance', 'KuCoin', 'Gate.io', 'Coinbase', 'OKX'];
-            let hasExchange = exchanges.some(e => knownExchanges.includes(e));
-
-            let score = 0;
-            if(hasVolume) score++;
-            if(hasMarketCap) score++;
-            if(hasPrice) score++;
-            if(hasExchange) score++;
+            if(exchanges.some(e => knownExchanges.includes(e))) score++;
 
             if(score === 4) return {text:'خوب', className:'good'};
             else if(score >= 2) return {text:'متوسط', className:'medium'};
@@ -94,21 +89,24 @@
 
         async function fetchCoins() {
             try {
-                const res = await fetch(`https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_asc&per_page=250&page=1&sparkline=false`);
+                // استفاده از Proxy برای رفع مشکل CORS
+                const proxy = 'https://api.allorigins.win/raw?url=';
+                const url = encodeURIComponent('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_asc&per_page=250&page=1&sparkline=false');
+                const res = await fetch(proxy + url);
                 let data = await res.json();
 
-                // فیلتر بر اساس معیارهای تنظیم شده
+                // مرتب‌سازی و فیلتر اولیه قبل از نمایش
                 data = data.filter(c => 
                     c.total_volume >= settings.minVolume &&
                     c.market_cap <= settings.maxMarketCap &&
                     c.current_price <= settings.maxPrice
-                );
+                ).slice(0, settings.numCoins);
 
-                coins = data.slice(0, settings.numCoins);
-
+                coins = data;
                 renderCoins();
             } catch(e) {
                 console.error("خطا در دریافت داده‌ها:", e);
+                document.getElementById('coins-container').innerHTML = '<p>خطا در دریافت داده‌ها. دوباره تلاش کنید.</p>';
             }
         }
 
@@ -140,7 +138,6 @@
             });
         }
 
-        // شروع اولیه
         fetchCoins();
         intervalId = setInterval(fetchCoins, settings.updateInterval);
     </script>
